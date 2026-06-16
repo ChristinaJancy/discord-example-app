@@ -1,0 +1,8 @@
+name = "jancy"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+APP_ID = "1509469552755478579"
+PUBLIC_KEY = "cb01cc3d1655a2007dfd483a7a81acfa564ebec7e39c6ccbf19a3809db344d9b"
