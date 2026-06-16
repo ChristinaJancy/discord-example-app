@@ -185,8 +185,94 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
       });
     }
 
+    if (name === 'challenge') {
+      const userId = req.body.member?.user?.id ?? req.body.user?.id;
+      const objectName = data.options[0].value;
+      // Store challenger's pick keyed by this interaction's ID
+      activeGames[id] = { id: userId, objectName };
+      return res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          flags: InteractionResponseFlags.IS_COMPONENTS_V2,
+          components: [
+            {
+              type: MessageComponentTypes.TEXT_DISPLAY,
+              content: `<@${userId}> wants to play Rock Paper Scissors! Click to accept.`,
+            },
+            {
+              type: MessageComponentTypes.ACTION_ROW,
+              components: [{
+                type: MessageComponentTypes.BUTTON,
+                label: 'Accept Challenge',
+                style: ButtonStyleTypes.PRIMARY,
+                custom_id: `accept_button_${id}`,
+              }],
+            },
+          ],
+        },
+      });
+    }
+
     console.error(`unknown command: ${name}`);
     return res.status(400).json({ error: 'unknown command' });
+  }
+
+  if (type === InteractionType.MESSAGE_COMPONENT) {
+    const { custom_id, values } = data;
+    const userId = req.body.member?.user?.id ?? req.body.user?.id;
+
+    // Button clicked — show ephemeral select menu so opponent picks their object
+    if (custom_id.startsWith('accept_button_')) {
+      const gameId = custom_id.replace('accept_button_', '');
+      return res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          flags: InteractionResponseFlags.IS_COMPONENTS_V2 | InteractionResponseFlags.EPHEMERAL,
+          components: [
+            {
+              type: MessageComponentTypes.TEXT_DISPLAY,
+              content: 'Pick your weapon!',
+            },
+            {
+              type: MessageComponentTypes.ACTION_ROW,
+              components: [{
+                type: MessageComponentTypes.STRING_SELECT,
+                custom_id: `select_choice_${gameId}`,
+                placeholder: 'Choose your object...',
+                options: getShuffledOptions(),
+              }],
+            },
+          ],
+        },
+      });
+    }
+
+    // Select picked — resolve the game and post the result
+    if (custom_id.startsWith('select_choice_')) {
+      const gameId = custom_id.replace('select_choice_', '');
+      const game = activeGames[gameId];
+      delete activeGames[gameId];
+
+      if (!game) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            flags: InteractionResponseFlags.IS_COMPONENTS_V2 | InteractionResponseFlags.EPHEMERAL,
+            components: [{ type: MessageComponentTypes.TEXT_DISPLAY, content: 'Game not found — it may have already been played!' }],
+          },
+        });
+      }
+
+      const p2 = { id: userId, objectName: values[0] };
+      const resultStr = getResult(game, p2);
+      return res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          flags: InteractionResponseFlags.IS_COMPONENTS_V2,
+          components: [{ type: MessageComponentTypes.TEXT_DISPLAY, content: resultStr }],
+        },
+      });
+    }
   }
 
   console.error('unknown interaction type', type);
